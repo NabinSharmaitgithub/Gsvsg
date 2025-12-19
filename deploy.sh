@@ -2,10 +2,7 @@
 
 # This script automates the process of adding, committing, and pushing code to GitHub.
 
-# Exit immediately if a command exits with a non-zero status.
-set -e
-
-# 1. Check for changes
+# 1. Check for uncommitted changes
 echo "Checking for changes..."
 if git diff-index --quiet HEAD --; then
     echo "No changes to commit. Working directory is clean."
@@ -31,6 +28,9 @@ git commit -m "$commit_message"
 
 # 6. Push the changes to the 'main' branch of the 'origin' remote repository.
 echo "Pushing to GitHub..."
-git push origin main
-
-echo "✅ Code successfully pushed to the main branch on GitHub."
+if git push origin main; then
+  echo "✅ Code successfully pushed to the main branch on GitHub."
+else
+  echo "❌ Failed to push to GitHub. Please check your connection and ensure the remote 'origin' is configured correctly."
+  exit 1
+fi
