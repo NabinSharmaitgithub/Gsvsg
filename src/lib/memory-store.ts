@@ -46,11 +46,6 @@ class ChatStore {
     if(room) {
       room.users.delete(userId);
       room.typing.delete(userId);
-      if (room.users.size === 0) {
-        // If both users leave, we can clear the messages to free up memory.
-        // The room itself will be purged later.
-        room.messages = [];
-      }
     }
   }
 
@@ -100,7 +95,7 @@ class ChatStore {
   purgeOldData() {
     const now = Date.now();
     this.rooms.forEach((room, id) => {
-      // Purge rooms that are older than the message TTL
+      // Purge rooms that are older than the message TTL and have no users
       if (now - room.createdAt > MESSAGE_TTL) {
         this.rooms.delete(id);
       }

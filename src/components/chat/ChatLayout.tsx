@@ -61,7 +61,7 @@ export default function ChatLayout({ chatId }: { chatId: string }) {
         if (!joinResult.success) {
            setError(joinResult.error || "Could not join chat. The room might be full.");
            if (joinResult.error?.includes("full")) {
-             router.push('/');
+            //  router.push('/');
            }
         }
       })

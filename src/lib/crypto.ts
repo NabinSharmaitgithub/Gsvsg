@@ -9,7 +9,7 @@ function bufferToBase64(buffer: ArrayBuffer): string {
     binary += String.fromCharCode(bytes[i]);
   }
   // Use URL-safe characters
-  return window.btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 // Helper to convert URL-safe Base64 to ArrayBuffer
@@ -20,7 +20,7 @@ function base64ToBuffer(base64: string): ArrayBuffer {
     paddedBase64 += '=';
   }
   // Replace URL-safe characters with standard Base64 characters
-  const binary_string = window.atob(paddedBase64.replace(/-/g, '+').replace(/_/g, '/'));
+  const binary_string = atob(paddedBase64.replace(/-/g, '+').replace(/_/g, '/'));
   const len = binary_string.length;
   const bytes = new Uint8Array(len);
   for (let i = 0; i < len; i++) {
