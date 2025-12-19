@@ -2,7 +2,6 @@ import { ChatRoom, Message } from "./types";
 import { randomUUID } from "crypto";
 
 const MESSAGE_TTL = 24 * 60 * 60 * 1000; // 24 hours
-const ROOM_TTL = 5 * 60 * 1000; // 5 minutes for an empty room
 
 class ChatStore {
   private rooms: Map<string, ChatRoom>;
@@ -48,8 +47,9 @@ class ChatStore {
       room.users.delete(userId);
       room.typing.delete(userId);
       if (room.users.size === 0) {
-        // Instead of deleting immediately, let the cleanup job handle it
-        // to allow for reconnections.
+        // If both users leave, we can clear the messages to free up memory.
+        // The room itself will be purged later.
+        room.messages = [];
       }
     }
   }
@@ -100,13 +100,8 @@ class ChatStore {
   purgeOldData() {
     const now = Date.now();
     this.rooms.forEach((room, id) => {
-      // Purge old messages
-      room.messages = room.messages.filter(
-        (msg) => now - msg.timestamp < MESSAGE_TTL
-      );
-      
-      // Purge empty, old rooms
-      if (room.users.size === 0 && now - room.createdAt > ROOM_TTL) {
+      // Purge rooms that are older than the message TTL
+      if (now - room.createdAt > MESSAGE_TTL) {
         this.rooms.delete(id);
       }
     });
