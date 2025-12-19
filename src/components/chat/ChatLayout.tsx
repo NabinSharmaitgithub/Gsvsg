@@ -60,8 +60,9 @@ export default function ChatLayout({ chatId }: { chatId: string }) {
       .then(joinResult => {
         if (!joinResult.success) {
            setError(joinResult.error || "Could not join chat. The room might be full.");
-           // This was causing a redirect for the second user.
-           // router.push('/');
+           if (joinResult.error?.includes("full")) {
+             router.push('/');
+           }
         }
       })
       .catch(() => setError("Invalid encryption key."));
