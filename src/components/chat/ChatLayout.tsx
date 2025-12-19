@@ -60,7 +60,8 @@ export default function ChatLayout({ chatId }: { chatId: string }) {
       .then(joinResult => {
         if (!joinResult.success) {
            setError(joinResult.error || "Could not join chat. The room might be full.");
-           router.push('/');
+           // This was causing a redirect for the second user.
+           // router.push('/');
         }
       })
       .catch(() => setError("Invalid encryption key."));
@@ -118,7 +119,11 @@ export default function ChatLayout({ chatId }: { chatId: string }) {
         });
 
       } else if (!result.success) {
-        console.error("Polling failed:", result.error);
+        if (result.error?.includes("Chat room not found")) {
+            setError("This chat has ended as the other user has left.");
+        } else {
+            console.error("Polling failed:", result.error);
+        }
       }
     } catch (e) {
       console.error("Error during polling:", e);

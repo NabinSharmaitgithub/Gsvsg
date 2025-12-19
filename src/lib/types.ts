@@ -10,7 +10,7 @@ export type ChatRoom = {
   users: Set<string>;
   messages: Message[];
   typing: Set<string>;
-  userLeft: Set<string>;
+  createdAt: number;
 };
 
 export type ServerEvent = {

@@ -2,6 +2,7 @@ import { ChatRoom, Message } from "./types";
 import { randomUUID } from "crypto";
 
 const MESSAGE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const ROOM_TTL = 5 * 60 * 1000; // 5 minutes for an empty room
 
 class ChatStore {
   private rooms: Map<string, ChatRoom>;
@@ -9,7 +10,7 @@ class ChatStore {
 
   constructor() {
     this.rooms = new Map();
-    this.cleanupInterval = setInterval(() => this.purgeOldMessages(), 60 * 60 * 1000); // every hour
+    this.cleanupInterval = setInterval(() => this.purgeOldData(), 60 * 1000); // every minute
   }
 
   createChat(): string {
@@ -19,7 +20,7 @@ class ChatStore {
       users: new Set(),
       messages: [],
       typing: new Set(),
-      userLeft: new Set(),
+      createdAt: Date.now(),
     });
     return id;
   }
@@ -30,11 +31,14 @@ class ChatStore {
 
   joinChat(id: string, userId: string): boolean {
     const room = this.getRoom(id);
-    if (!room || room.users.size >= 2) {
-      if(room && !room.users.has(userId)) return false;
+    if (!room) {
+      return false; // Room doesn't exist
+    }
+    // Allow re-joining, but don't let a 3rd user in.
+    if (room.users.size >= 2 && !room.users.has(userId)) {
+      return false;
     }
     room.users.add(userId);
-    room.userLeft.delete(userId);
     return true;
   }
   
@@ -43,10 +47,9 @@ class ChatStore {
     if(room) {
       room.users.delete(userId);
       room.typing.delete(userId);
-      room.userLeft.add(userId);
       if (room.users.size === 0) {
-        // Delete room if both users have left
-        this.rooms.delete(id);
+        // Instead of deleting immediately, let the cleanup job handle it
+        // to allow for reconnections.
       }
     }
   }
@@ -94,14 +97,17 @@ class ChatStore {
     }
   }
 
-  purgeOldMessages() {
+  purgeOldData() {
     const now = Date.now();
-    this.rooms.forEach((room) => {
+    this.rooms.forEach((room, id) => {
+      // Purge old messages
       room.messages = room.messages.filter(
         (msg) => now - msg.timestamp < MESSAGE_TTL
       );
-      if(room.users.size === 0 && room.messages.length === 0){
-        this.rooms.delete(room.id);
+      
+      // Purge empty, old rooms
+      if (room.users.size === 0 && now - room.createdAt > ROOM_TTL) {
+        this.rooms.delete(id);
       }
     });
   }
