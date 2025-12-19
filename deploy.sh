@@ -5,24 +5,31 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
-# 1. Add all current changes to the staging area.
+# 1. Check for changes
+echo "Checking for changes..."
+if git diff-index --quiet HEAD --; then
+    echo "No changes to commit. Working directory is clean."
+    exit 0
+fi
+
+# 2. Add all current changes to the staging area.
 echo "Staging files..."
 git add .
 
-# 2. Prompt the user for a commit message.
+# 3. Prompt the user for a commit message.
 read -p "Enter your commit message: " commit_message
 
-# 3. If the user doesn't provide a message, use a default one.
+# 4. If the user doesn't provide a message, use a default one.
 if [ -z "$commit_message" ]; then
   commit_message="chore: auto-commit changes"
   echo "No commit message entered. Using default: '$commit_message'"
 fi
 
-# 4. Commit the changes.
+# 5. Commit the changes.
 echo "Committing changes..."
 git commit -m "$commit_message"
 
-# 5. Push the changes to the 'main' branch of the 'origin' remote repository.
+# 6. Push the changes to the 'main' branch of the 'origin' remote repository.
 echo "Pushing to GitHub..."
 git push origin main
 
