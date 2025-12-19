@@ -11,6 +11,7 @@ import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { TypingIndicator } from "./TypingIndicator";
 import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 type ExtendedMessage = Message & { isDisappearing?: boolean };
 
