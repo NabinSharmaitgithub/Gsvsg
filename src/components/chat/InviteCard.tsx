@@ -1,7 +1,8 @@
+
 "use client";
 
-import { useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Copy, Check, ShieldAlert } from "lucide-react";
 import { createChat } from "@/app/actions";
 import { generateKey, exportKey } from "@/lib/crypto";
 import { Button } from "@/components/ui/button";
@@ -12,9 +13,25 @@ export function InviteCard() {
   const [inviteLink, setInviteLink] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [isCryptoAvailable, setIsCryptoAvailable] = useState(true);
   const { toast } = useToast();
 
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (!window.crypto || !window.crypto.subtle)) {
+      setIsCryptoAvailable(false);
+    }
+  }, []);
+
   const handleCreateChat = async () => {
+    if (!isCryptoAvailable) {
+      toast({
+        variant: "destructive",
+        title: "Unsupported Browser or Context",
+        description: "The Web Crypto API is not available. Please use a modern browser over HTTPS.",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       const chatAction = await createChat();
@@ -42,6 +59,20 @@ export function InviteCard() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  
+  if (!isCryptoAvailable) {
+    return (
+      <div className="space-y-4 text-center p-4 rounded-lg bg-destructive/10 border border-destructive/50">
+        <div className="flex items-center justify-center gap-2 text-destructive">
+          <ShieldAlert className="w-5 h-5" />
+          <p className="font-semibold">Secure Context Required</p>
+        </div>
+        <p className="text-sm text-destructive/80">
+          This application requires a secure (HTTPS) connection to use its end-to-end encryption features. Please ensure you are accessing this site over HTTPS.
+        </p>
+      </div>
+    );
+  }
 
   if (inviteLink) {
     return (
@@ -67,7 +98,7 @@ export function InviteCard() {
   }
 
   return (
-    <Button onClick={handleCreateChat} disabled={isLoading} className="w-full" size="lg">
+    <Button onClick={handleCreateChat} disabled={isLoading || !isCryptoAvailable} className="w-full" size="lg">
       {isLoading ? "Generating Secure Chat..." : "Create New Chat"}
     </Button>
   );
