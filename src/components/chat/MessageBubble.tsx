@@ -1,7 +1,9 @@
+
 "use client";
 
 import { cn } from "@/lib/utils";
 import type { Message } from "@/lib/types";
+import { useEffect, useState } from "react";
 
 type MessageBubbleProps = {
   message: Message & { isDisappearing?: boolean };
@@ -13,8 +15,9 @@ export function MessageBubble({ message, isOwnMessage }: MessageBubbleProps) {
   return (
     <div
       className={cn(
-        "flex w-full",
+        "flex w-full transition-opacity duration-300",
         isOwnMessage ? "justify-end" : "justify-start",
+        message.isDisappearing ? "animate-disappear" : "animate-in fade-in"
       )}
     >
       <div

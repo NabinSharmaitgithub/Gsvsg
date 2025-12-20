@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
@@ -41,10 +42,40 @@ export default function ChatLayout({ chatId, currentUser, otherUserId }: ChatLay
   
   useEffect(() => {
     if (serverMessages) {
-        setMessages(serverMessages);
-        scrollToBottom();
+        // Map server messages and set a timeout to mark them for disappearing
+        const extendedMessages = serverMessages.map(msg => ({ ...msg, isDisappearing: false }));
+        setMessages(extendedMessages);
+        
+        // When new messages arrive, make them disappear after a delay
+        // This simulates the ephemeral nature of the chat
+        const newMessages = serverMessages.filter(
+            (sm) => !messages.some((m) => m.id === sm.id)
+        );
+
+        if(newMessages.length > 0) {
+            scrollToBottom();
+            const timer = setTimeout(() => {
+                setMessages(prevMessages => 
+                    prevMessages.map(msg => 
+                        newMessages.some(nm => nm.id === msg.id) ? { ...msg, isDisappearing: true } : msg
+                    )
+                );
+            }, 3000); // Start disappearing after 3 seconds
+
+            const removalTimer = setTimeout(() => {
+                setMessages(prevMessages => 
+                    prevMessages.filter(msg => !newMessages.some(nm => nm.id === msg.id))
+                );
+            }, 3300); // Remove from DOM after animation
+
+            return () => {
+                clearTimeout(timer);
+                clearTimeout(removalTimer);
+            }
+        }
     }
-  }, [serverMessages])
+  }, [serverMessages]);
+
 
   useEffect(() => {
     // When the chat is opened or messages are loaded, mark them as read
@@ -59,8 +90,8 @@ export default function ChatLayout({ chatId, currentUser, otherUserId }: ChatLay
   }, [chatData, currentUser, chatRef]);
 
   const typingUsers = useMemo(() => {
-    if (!chatData?.typing || !otherUserData) return [];
-    return chatData.typing.includes(otherUserId!) ? [otherUserData.displayName] : []
+    if (!chatData?.typing || !otherUserData || !otherUserId) return [];
+    return chatData.typing.includes(otherUserId) ? [otherUserData.displayName] : []
   }, [chatData, otherUserData, otherUserId]);
 
 
@@ -84,3 +115,4 @@ export default function ChatLayout({ chatId, currentUser, otherUserId }: ChatLay
     </div>
   );
 }
+

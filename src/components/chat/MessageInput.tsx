@@ -1,13 +1,13 @@
+
 "use client";
 
-import { useRef, useState, useTransition, useEffect } from "react";
+import { useRef, useState, useTransition, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { SendHorizonal } from "lucide-react";
-import { collection, doc, serverTimestamp, writeBatch, increment } from "firebase/firestore";
+import { collection, doc, serverTimestamp, writeBatch, increment, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
 import { useFirestore } from "@/firebase";
-import { arrayRemove, arrayUnion, updateDoc } from "firebase/firestore";
 
 type MessageInputProps = {
   chatId: string;
@@ -16,8 +16,6 @@ type MessageInputProps = {
   onMessageSent: () => void;
 };
 
-let typingTimeout: NodeJS.Timeout | null = null;
-
 export function MessageInput({ chatId, userId, otherUserId, onMessageSent }: MessageInputProps) {
   const [text, setText] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -25,30 +23,39 @@ export function MessageInput({ chatId, userId, otherUserId, onMessageSent }: Mes
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const firestore = useFirestore();
 
-  const chatRef = doc(firestore, 'chats', chatId);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const handleTyping = (isTyping: boolean) => {
-    updateDoc(chatRef, {
-        typing: isTyping ? arrayUnion(userId) : arrayRemove(userId)
-    }).catch(err => console.error("Error updating typing status: ", err));
-  };
+  const setTypingStatus = useCallback((isTyping: boolean) => {
+    if (!chatId) return;
+    const chatRef = doc(firestore, 'chats', chatId);
+    const operation = isTyping ? arrayUnion(userId) : arrayRemove(userId);
+    updateDoc(chatRef, { typing: operation })
+      .catch(err => console.error("Error updating typing status: ", err));
+  }, [firestore, chatId, userId]);
 
   useEffect(() => {
+    // Cleanup on unmount
     return () => {
-        if(typingTimeout) clearTimeout(typingTimeout);
-        handleTyping(false);
-    }
-  }, []);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      setTypingStatus(false);
+    };
+  }, [setTypingStatus]);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
-    
-    if (typingTimeout) clearTimeout(typingTimeout);
-    else handleTyping(true);
+    const newText = e.target.value;
+    setText(newText);
 
-    typingTimeout = setTimeout(() => {
-      handleTyping(false);
-      typingTimeout = null;
+    if (!typingTimeoutRef.current) {
+      setTypingStatus(true);
+    } else {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      setTypingStatus(false);
+      typingTimeoutRef.current = null;
     }, 2000);
 
     // Auto-resize textarea
@@ -65,13 +72,23 @@ export function MessageInput({ chatId, userId, otherUserId, onMessageSent }: Mes
 
     const originalText = text;
     setText("");
-    if(textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
     }
+    
+    // Clear typing timeout and set status to false immediately
+    if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = null;
+    }
+    setTypingStatus(false);
+
 
     startTransition(async () => {
       try {
+        const chatRef = doc(firestore, 'chats', chatId);
         const messagesColRef = collection(firestore, 'chats', chatId, 'messages');
+        
         const newMessage = {
             senderId: userId,
             text: originalText,
@@ -102,9 +119,6 @@ export function MessageInput({ chatId, userId, otherUserId, onMessageSent }: Mes
           description: error instanceof Error ? error.message : "An unknown error occurred",
         });
         setText(originalText); // Restore text if sending failed
-      } finally {
-        if (typingTimeout) clearTimeout(typingTimeout);
-        handleTyping(false);
       }
     });
   };
