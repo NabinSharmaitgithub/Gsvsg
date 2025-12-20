@@ -1,5 +1,7 @@
+
 "use client";
 
+import { useState, useEffect } from "react";
 import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +18,12 @@ export function UserDashboard() {
     const auth = useAuth();
     const { user } = useUser();
     const firestore = useFirestore();
+    const [year, setYear] = useState<number | null>(null);
+
+    useEffect(() => {
+        // This ensures the year is only calculated on the client, preventing hydration errors.
+        setYear(new Date().getFullYear());
+    }, []);
 
     const chatsQuery = useMemoFirebase(() => {
         if (!user) return null;
@@ -81,7 +89,7 @@ export function UserDashboard() {
                 </CardContent>
             </Card>
             <footer className="text-center mt-8 text-xs text-muted-foreground">
-                <p>&copy; {new Date().getFullYear()} ShadowText. Your privacy is paramount.</p>
+                {year && <p>&copy; {year} ShadowText. Your privacy is paramount.</p>}
             </footer>
         </div>
     );
