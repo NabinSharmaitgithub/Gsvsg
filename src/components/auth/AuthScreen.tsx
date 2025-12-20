@@ -38,6 +38,10 @@ export function AuthScreen() {
                 description: `Welcome, ${user.displayName}!`,
             });
         } catch (error: any) {
+            // Don't show error toast if user simply closes the popup
+            if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                return;
+            }
             console.error("Authentication error:", error);
             toast({
                 variant: "destructive",
