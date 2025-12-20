@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useAuth } from "@/firebase";
+import { useEffect, useState } from "react";
+import { useAuth, useFirestore, setDocumentNonBlocking } from "@/firebase";
 import { type AuthProvider, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, serverTimestamp } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/icons/Logo";
 import { useToast } from "@/hooks/use-toast";
-import { useFirestore, setDocumentNonBlocking } from "@/firebase";
 import { Chrome, Github, Facebook } from 'lucide-react';
 
 
