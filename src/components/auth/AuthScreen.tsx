@@ -1,0 +1,69 @@
+"use client";
+
+import { useAuth } from "@/firebase";
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/icons/Logo";
+import { useToast } from "@/hooks/use-toast";
+import { useFirestore, setDocumentNonBlocking } from "@/firebase";
+import { Chrome } from 'lucide-react';
+
+
+export function AuthScreen() {
+    const auth = useAuth();
+    const firestore = useFirestore();
+    const { toast } = useToast();
+
+    const handleGoogleSignIn = async () => {
+        const provider = new GoogleAuthProvider();
+        try {
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+
+            // Create a user profile in Firestore if it's a new user
+            const userRef = doc(firestore, "users", user.uid);
+            
+            // Use non-blocking setDoc with merge:true to create or update user profile
+            setDocumentNonBlocking(userRef, {
+                uid: user.uid,
+                displayName: user.displayName,
+                email: user.email,
+                photoURL: user.photoURL,
+                lastLogin: serverTimestamp()
+            }, { merge: true });
+
+            toast({
+                title: "Signed In",
+                description: `Welcome, ${user.displayName}!`,
+            });
+        } catch (error: any) {
+            console.error("Authentication error:", error);
+            toast({
+                variant: "destructive",
+                title: "Authentication Failed",
+                description: error.message || "An unexpected error occurred.",
+            });
+        }
+    };
+
+    return (
+        <div className="w-full max-w-md text-center">
+            <div className="bg-card/80 backdrop-blur-sm p-8 rounded-lg">
+                <Logo className="w-16 h-16 mb-4 text-primary mx-auto" />
+                <h1 className="font-headline text-3xl mb-2">Welcome to ShadowText</h1>
+                <p className="text-muted-foreground mb-6">Secure and private messaging.</p>
+                <Button onClick={handleGoogleSignIn} className="w-full" size="lg">
+                    <Chrome className="mr-2 h-5 w-5" />
+                    Sign in with Google
+                </Button>
+                <p className="text-xs text-muted-foreground mt-6">
+                    By signing in, you agree to our terms of service (which don't exist yet).
+                </p>
+            </div>
+             <footer className="text-center mt-8 text-xs text-muted-foreground">
+                <p>&copy; {new Date().getFullYear()} ShadowText. Your privacy is paramount.</p>
+            </footer>
+        </div>
+    );
+}

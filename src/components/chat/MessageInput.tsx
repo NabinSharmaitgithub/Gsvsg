@@ -1,33 +1,44 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { Send } from "lucide-radix";
+import { useRef, useState, useTransition, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { setTyping, sendMessage } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import { SendHorizonal } from "lucide-react";
+import { collection, doc, serverTimestamp, writeBatch, increment } from "firebase/firestore";
+import { useFirestore } from "@/firebase";
+import { arrayRemove, arrayUnion, updateDoc } from "firebase/firestore";
 
 type MessageInputProps = {
   chatId: string;
   userId: string;
-  cryptoKey: CryptoKey | null;
+  otherUserId: string | undefined;
   onMessageSent: () => void;
 };
 
 let typingTimeout: NodeJS.Timeout | null = null;
 
-export function MessageInput({ chatId, userId, cryptoKey, onMessageSent }: MessageInputProps) {
+export function MessageInput({ chatId, userId, otherUserId, onMessageSent }: MessageInputProps) {
   const [text, setText] = useState("");
   const [isPending, startTransition] = useTransition();
   const { toast } = useToast();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const firestore = useFirestore();
+
+  const chatRef = doc(firestore, 'chats', chatId);
 
   const handleTyping = (isTyping: boolean) => {
-    startTransition(() => {
-      setTyping(chatId, userId, isTyping);
-    });
+    updateDoc(chatRef, {
+        typing: isTyping ? arrayUnion(userId) : arrayRemove(userId)
+    }).catch(err => console.error("Error updating typing status: ", err));
   };
+
+  useEffect(() => {
+    return () => {
+        if(typingTimeout) clearTimeout(typingTimeout);
+        handleTyping(false);
+    }
+  }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setText(e.target.value);
@@ -50,7 +61,7 @@ export function MessageInput({ chatId, userId, cryptoKey, onMessageSent }: Messa
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!text.trim() || !cryptoKey || isPending) return;
+    if (!text.trim() || isPending || !otherUserId) return;
 
     const originalText = text;
     setText("");
@@ -60,12 +71,29 @@ export function MessageInput({ chatId, userId, cryptoKey, onMessageSent }: Messa
 
     startTransition(async () => {
       try {
-        const { encryptMessage } = await import("@/lib/crypto");
-        const encryptedText = await encryptMessage(originalText, cryptoKey);
-        const result = await sendMessage(chatId, userId, encryptedText);
-        if (!result.success) {
-          throw new Error(result.error || "Failed to send message.");
+        const messagesColRef = collection(firestore, 'chats', chatId, 'messages');
+        const newMessage = {
+            senderId: userId,
+            text: originalText,
+            timestamp: serverTimestamp(),
         }
+
+        const batch = writeBatch(firestore);
+
+        const messageRef = doc(messagesColRef);
+        batch.set(messageRef, newMessage);
+
+        batch.update(chatRef, {
+            lastMessage: {
+                text: originalText,
+                timestamp: serverTimestamp(),
+                senderId: userId,
+            },
+            [`userStatus.${otherUserId}.unreadCount`]: increment(1),
+        });
+        
+        await batch.commit();
+
         onMessageSent();
       } catch (error) {
         toast({
@@ -74,6 +102,9 @@ export function MessageInput({ chatId, userId, cryptoKey, onMessageSent }: Messa
           description: error instanceof Error ? error.message : "An unknown error occurred",
         });
         setText(originalText); // Restore text if sending failed
+      } finally {
+        if (typingTimeout) clearTimeout(typingTimeout);
+        handleTyping(false);
       }
     });
   };
@@ -85,7 +116,7 @@ export function MessageInput({ chatId, userId, cryptoKey, onMessageSent }: Messa
           ref={textareaRef}
           value={text}
           onChange={handleChange}
-          placeholder="Type an ephemeral message..."
+          placeholder="Type a message..."
           rows={1}
           className="max-h-32"
           onKeyDown={(e) => {
@@ -94,9 +125,9 @@ export function MessageInput({ chatId, userId, cryptoKey, onMessageSent }: Messa
               handleSubmit(e);
             }
           }}
-          disabled={!cryptoKey || isPending}
+          disabled={isPending}
         />
-        <Button type="submit" size="icon" disabled={!text.trim() || !cryptoKey || isPending} aria-label="Send message">
+        <Button type="submit" size="icon" disabled={!text.trim() || isPending} aria-label="Send message">
           <SendHorizonal />
         </Button>
       </form>

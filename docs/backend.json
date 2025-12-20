@@ -1,173 +1,97 @@
 {
   "entities": {
-    "Session": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Session",
+    "UserProfile": {
+      "title": "User Profile",
       "type": "object",
-      "description": "Represents a user's session, used for identifying users without requiring login details.",
+      "description": "Represents a registered user's public profile.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the session."
+        "uid": { "type": "string", "description": "The user's unique ID from Firebase Auth." },
+        "displayName": { "type": "string", "description": "The user's public display name." },
+        "email": { "type": "string", "format": "email", "description": "The user's email address." },
+        "photoURL": { "type": "string", "format": "uri", "description": "URL of the user's profile picture." },
+        "lastLogin": { "type": "string", "format": "date-time", "description": "Timestamp of the user's last login." }
+      },
+      "required": ["uid", "displayName", "email", "photoURL"]
+    },
+    "Chat": {
+      "title": "Chat Room",
+      "type": "object",
+      "description": "Represents a conversation between two or more users.",
+      "properties": {
+        "participants": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "An array of user UIDs who are part of the chat."
         },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp indicating when the session was created.",
-          "format": "date-time"
+        "createdAt": { "type": "string", "format": "date-time" },
+        "lastMessage": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string" },
+            "senderId": { "type": "string" },
+            "timestamp": { "type": "string", "format": "date-time" }
+          }
         },
-        "expiryTime": {
-          "type": "string",
-          "description": "Timestamp indicating when the session should expire.",
-          "format": "date-time"
+        "typing": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Array of user UIDs who are currently typing."
+        },
+        "userStatus": {
+            "type": "object",
+            "description": "Maps user UIDs to their status in the chat (e.g., unread count)."
         }
       },
-      "required": [
-        "id",
-        "createdAt",
-        "expiryTime"
-      ]
+      "required": ["participants", "createdAt"]
     },
     "ChatMessage": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "ChatMessage",
+      "title": "Chat Message",
       "type": "object",
-      "description": "Represents a single chat message between two users.",
+      "description": "A single message within a chat.",
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the chat message."
-        },
-        "senderSessionId": {
-          "type": "string",
-          "description": "Reference to Session of the message sender. (Relationship: Session 1:N ChatMessage)"
-        },
-        "receiverSessionId": {
-          "type": "string",
-          "description": "Reference to Session of the message receiver. (Relationship: Session 1:N ChatMessage)"
-        },
-        "content": {
-          "type": "string",
-          "description": "The encrypted content of the chat message."
-        },
-        "timestamp": {
-          "type": "string",
-          "description": "Timestamp indicating when the message was sent.",
-          "format": "date-time"
-        },
-        "status": {
-          "type": "string",
-          "description": "Status of the message (e.g., sent, delivered, opened).",
-          "format": "string"
-        }
+        "senderId": { "type": "string", "description": "The UID of the user who sent the message." },
+        "text": { "type": "string", "description": "The content of the message." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "The time the message was sent." }
       },
-      "required": [
-        "id",
-        "senderSessionId",
-        "receiverSessionId",
-        "content",
-        "timestamp",
-        "status"
-      ]
-    },
-    "InviteLink": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "InviteLink",
-      "type": "object",
-      "description": "Represents a one-time use invite link for creating a new chat session.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the invite link."
-        },
-        "creatorSessionId": {
-          "type": "string",
-          "description": "Reference to Session of the user who created the invite link. (Relationship: Session 1:N InviteLink)"
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp indicating when the invite link was created.",
-          "format": "date-time"
-        },
-        "expiryTime": {
-          "type": "string",
-          "description": "Timestamp indicating when the invite link should expire.",
-          "format": "date-time"
-        },
-        "used": {
-          "type": "boolean",
-          "description": "Indicates whether the invite link has been used or not."
-        }
-      },
-      "required": [
-        "id",
-        "creatorSessionId",
-        "createdAt",
-        "expiryTime",
-        "used"
-      ]
+      "required": ["senderId", "text", "timestamp"]
     }
   },
   "auth": {
-    "providers": [
-      "password",
-      "anonymous"
-    ]
+    "providers": ["google.com"]
   },
   "firestore": {
     "structure": [
       {
-        "path": "/sessions/{sessionId}",
+        "path": "/users/{userId}",
         "definition": {
-          "entityName": "Session",
-          "schema": {
-            "$ref": "#/backend/entities/Session"
-          },
-          "description": "Stores session information, including creation and expiry timestamps.",
-          "params": [
-            {
-              "name": "sessionId",
-              "description": "Unique identifier for the session."
-            }
-          ]
+          "entityName": "UserProfile",
+          "schema": { "$ref": "#/backend/entities/UserProfile" },
+          "description": "Stores public user profile information.",
+          "params": [{ "name": "userId", "description": "The user's Firebase Auth UID." }]
         }
       },
       {
-        "path": "/sessions/{sessionId}/chatMessages/{chatMessageId}",
+        "path": "/chats/{chatId}",
+        "definition": {
+          "entityName": "Chat",
+          "schema": { "$ref": "#/backend/entities/Chat" },
+          "description": "Metadata for a chat session, including participants.",
+          "params": [{ "name": "chatId", "description": "Unique ID for the chat." }]
+        }
+      },
+      {
+        "path": "/chats/{chatId}/messages/{messageId}",
         "definition": {
           "entityName": "ChatMessage",
-          "schema": {
-            "$ref": "#/backend/entities/ChatMessage"
-          },
-          "description": "Stores chat messages associated with a specific session. Includes sender and receiver session IDs for authorization purposes.",
+          "schema": { "$ref": "#/backend/entities/ChatMessage" },
+          "description": "Sub-collection storing all messages for a given chat.",
           "params": [
-            {
-              "name": "sessionId",
-              "description": "Session ID associated with either the sender or receiver."
-            },
-            {
-              "name": "chatMessageId",
-              "description": "Unique identifier for the chat message."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/inviteLinks/{inviteLinkId}",
-        "definition": {
-          "entityName": "InviteLink",
-          "schema": {
-            "$ref": "#/backend/entities/InviteLink"
-          },
-          "description": "Stores invite link information, including the creator's session ID, creation and expiry timestamps, and usage status.",
-          "params": [
-            {
-              "name": "inviteLinkId",
-              "description": "Unique identifier for the invite link."
-            }
+            { "name": "chatId", "description": "The ID of the parent chat." },
+            { "name": "messageId", "description": "Unique ID for the message." }
           ]
         }
       }
     ],
-    "reasoning": "Given the application's emphasis on anonymity, ephemeral messages, and the absence of traditional user accounts, the Firestore structure is designed around temporary sessions.  Since there are no user accounts and we need to avoid using custom claims, we will follow a path-based approach using sessionId's to identify message ownership and access. This structure facilitates secure `list` operations because access to a message is predicated on knowing either the sender or receiver session ID, preventing unauthorized listing of messages. Authorization Independence is achieved since access control relies solely on session IDs present in the document itself, thus no `get()` calls are needed in the rules."
+    "reasoning": "This structure supports an authenticated chat system. The 'users' collection acts as a directory. The 'chats' collection manages conversations, using an array of participant UIDs for access control. This avoids complex queries and allows security rules to efficiently verify user permissions by simply checking if a user's UID is in the 'participants' array of a chat document."
   }
 }

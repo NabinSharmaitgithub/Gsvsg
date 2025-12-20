@@ -1,154 +1,54 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
+    
     /**
-     * Core Philosophy: This ruleset secures an anonymous chat application built
-     * around temporary sessions. Since there are no traditional user accounts,
-     * the anonymous authentication UID is treated as the `sessionId`. The
-     * security model is primarily based on document ownership, where access
-     * is granted by comparing the user's `sessionId` (from `request.auth.uid`)
-     * to ownership fields (`senderSessionId`, `receiverSessionId`,
-     * `creatorSessionId`) stored directly on the documents.
-     *
-     * Data Structure:
-     * - /sessions/{sessionId}: A user's own session document.
-     * - /sessions/{sessionId}/chatMessages/{chatMessageId}: A subcollection
-     *   containing messages where the parent {sessionId} is either the sender
-     *   or receiver. This enables path-scoped queries.
-     * - /inviteLinks/{inviteLinkId}: A top-level collection of invite links,
-     *   which are publicly readable but privately managed.
-     *
-     * Key Security Decisions:
-     * - Session & Invite Listing Disabled: To protect user privacy in this
-     *   anonymous system, listing all documents in the `/sessions` and
-     *   `/inviteLinks` collections is strictly forbidden.
-     * - Path-based List Security: Listing chat messages is secured by the path.
-     *   A user can only list messages under their own session path
-     *   (`/sessions/{mySessionId}/...`), ensuring they only query for their
-     *   own conversations.
-     * - Denormalization for Authorization: Chat messages and invite links contain
-     *   denormalized session IDs (`senderSessionId`, `creatorSessionId`)
-     *   directly on the document. This allows for fast, efficient authorization
-     *   checks without needing costly `get()` calls to other documents.
-     */
-
-    // ------------------------------------------------------------------------
-    // Helper Functions
-    // ------------------------------------------------------------------------
-
-    /**
-     * Checks if the user is authenticated (even anonymously).
+     * Helper Functions
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
-    /**
-     * Checks if the authenticated user's session ID matches the provided session ID.
-     * This is the primary ownership check.
-     */
-    function isOwner(sessionId) {
-      return isSignedIn() && request.auth.uid == sessionId;
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     /**
-     * Checks for ownership on an existing document. Used for safe updates and deletes.
-     * Prevents operations on documents that do not exist.
+     * /users/{userId}
+     * - Anyone can read user profiles to search for users.
+     * - Only the owner can create or update their own profile.
      */
-    function isExistingOwner(sessionId) {
-      return isOwner(sessionId) && resource != null;
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(userId);
+      allow delete: if false; // Profiles cannot be deleted
     }
 
     /**
-     * Checks if the requesting user is either the sender or receiver of a chat message.
-     * Ensures only participants can read or update a message.
+     * /chats/{chatId}
+     * - A user can read a chat document if they are a participant.
+     * - A user can create a chat if they are one of the participants.
+     * - A user can update a chat (e.g., last message, typing status) if they are a participant.
+     * - Listing all chats is disallowed for security.
      */
-    function isChatMessageParticipant() {
-      return isSignedIn() && (request.auth.uid == resource.data.senderSessionId || request.auth.uid == resource.data.receiverSessionId);
-    }
-
-    /**
-     * Validates that a user is creating a session document for themselves and
-     * that the document data is consistent with its path ID.
-     */
-    function isValidNewSession(sessionId) {
-      // The `id` field in the document must match the document's ID in the path.
-      return isOwner(sessionId) && request.resource.data.id == sessionId;
-    }
-
-    /**
-     * Validates that a user is creating a chat message where they are the sender
-     * and the document is being placed in a logically consistent path.
-     */
-    function isValidNewChatMessage(sessionId) {
-      let data = request.resource.data;
-      // The creator of the message must be the authenticated sender.
-      let isSender = data.senderSessionId == request.auth.uid;
-      // The message must be created under the sender's or receiver's session path.
-      let isCorrectPath = data.senderSessionId == sessionId || data.receiverSessionId == sessionId;
-      return isSignedIn() && isSender && isCorrectPath;
-    }
-
-    /**
-     * Validates that a user is creating an invite link and correctly self-assigns ownership.
-     */
-    function isValidNewInviteLink() {
-      return isSignedIn() && request.resource.data.creatorSessionId == request.auth.uid;
-    }
-
-    /**
-     * Ensures critical relational IDs cannot be changed after creation.
-     */
-    function areChatMessageIdsImmutable() {
-      return request.resource.data.senderSessionId == resource.data.senderSessionId &&
-             request.resource.data.receiverSessionId == resource.data.receiverSessionId;
-    }
-
-
-    /**
-     * @description Rules for a user's own session document.
-     * @path /sessions/{sessionId}
-     * @allow (create) An anonymous user creates their own session document.
-     * @deny (create) A user tries to create a session document for another user's ID.
-     * @principle Restricts access to a user's own data tree and enforces relational integrity.
-     */
-    match /sessions/{sessionId} {
-      allow get: if isOwner(sessionId);
-      allow list: if false;
-      allow create: if isValidNewSession(sessionId);
-      allow update: if isExistingOwner(sessionId);
-      allow delete: if isExistingOwner(sessionId);
+    match /chats/{chatId} {
+      allow get, update: if isSignedIn() && request.auth.uid in resource.data.participants;
+      allow list: if false; // Explicitly disallow listing all chats
+      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
 
       /**
-       * @description Rules for chat messages within a session's subcollection.
-       * @path /sessions/{sessionId}/chatMessages/{chatMessageId}
-       * @allow (get) A user reads a message where they are the sender or receiver.
-       * @deny (get) A user attempts to read a message from a conversation they are not part of.
-       * @principle Enforces shared access between a closed set of collaborators (sender and receiver).
+       * /chats/{chatId}/messages/{messageId}
+       * - A user can read/list messages if they are a participant of the parent chat.
+       * - A user can create a message if they are a participant and the senderId is their own.
+       * - Nobody can update or delete messages to ensure message integrity.
        */
-      match /chatMessages/{chatMessageId} {
-        allow get: if isChatMessageParticipant();
-        allow list: if isOwner(sessionId);
-        allow create: if isValidNewChatMessage(sessionId);
-        allow update: if isChatMessageParticipant() && resource != null && areChatMessageIdsImmutable();
-        allow delete: if isOwner(resource.data.senderSessionId) && resource != null;
+      match /messages/{messageId} {
+        allow list, get: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if isSignedIn() && 
+                      request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
+                      request.resource.data.senderId == request.auth.uid;
+        allow update, delete: if false;
       }
-    }
-
-    /**
-     * @description Rules for invite links, which are publicly findable but privately managed.
-     * @path /inviteLinks/{inviteLinkId}
-     * @allow (get) Any user or service can read a specific invite link by its ID.
-     * @deny (list) No user can list all available invite links in the system.
-     * @principle Implements public read with owner-only writes.
-     */
-    match /inviteLinks/{inviteLinkId} {
-      allow get: if true;
-      allow list: if false;
-      allow create: if isValidNewInviteLink();
-      allow update: if isExistingOwner(resource.data.creatorSessionId);
-      allow delete: if isExistingOwner(resource.data.creatorSessionId);
     }
   }
 }
