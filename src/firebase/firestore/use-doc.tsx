@@ -26,21 +26,25 @@ export interface UseDocResult<T> {
 }
 
 /**
+ * A marker type to ensure that the query/reference passed to the hook is memoized.
+ * This is a trick to enforce the use of `useMemoFirebase` at the type level.
+ */
+type Memoized<T> = T & { __memo: true };
+
+/**
  * React hook to subscribe to a single Firestore document in real-time.
  * Handles nullable references.
- * 
- * IMPORTANT! YOU MUST MEMOIZE the inputted memoizedTargetRefOrQuery or BAD THINGS WILL HAPPEN
- * use useMemo to memoize it per React guidence.  Also make sure that it's dependencies are stable
- * references
  *
+ * IMPORTANT! You MUST wrap the reference with the `useMemoFirebase` hook,
+ * or the hook will enter an infinite loop.
  *
  * @template T Optional type for document data. Defaults to any.
- * @param {DocumentReference<DocumentData> | null | undefined} docRef -
- * The Firestore DocumentReference. Waits if null/undefined.
+ * @param {Memoized<DocumentReference> | null | undefined} memoizedDocRef -
+ * The memoized Firestore DocumentReference.
  * @returns {UseDocResult<T>} Object with data, isLoading, error.
  */
 export function useDoc<T = any>(
-  memoizedDocRef: (DocumentReference<DocumentData> & {__memo?: boolean}) | null | undefined,
+  memoizedDocRef: Memoized<DocumentReference<DocumentData>> | null | undefined,
 ): UseDocResult<T> {
   type StateDataType = WithId<T> | null;
 
@@ -48,11 +52,14 @@ export function useDoc<T = any>(
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
-  if (memoizedDocRef && !('__memo' in memoizedDocRef)) {
-    throw new Error('useDoc received a reference that was not created with useMemoFirebase. This will cause infinite loops.');
-  }
-
   useEffect(() => {
+     if (memoizedDocRef && !('__memo' in memoizedDocRef)) {
+      console.error('useDoc received a reference that was not created with useMemoFirebase. This will cause infinite loops.');
+      setError(new Error('useDoc reference must be memoized with useMemoFirebase.'));
+      setIsLoading(false);
+      return;
+    }
+
     if (!memoizedDocRef) {
       setData(null);
       setIsLoading(false);

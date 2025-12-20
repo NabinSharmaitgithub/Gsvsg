@@ -1,7 +1,11 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAuth, useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { useAuth } from "@/firebase/provider";
+import { useUser } from "@/firebase/auth/use-user";
+import { useFirestore } from "@/firebase/provider";
+import { useCollection, useMemoFirebase } from "@/firebase/firestore/use-collection";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -25,7 +29,7 @@ export function UserDashboard() {
     }, []);
 
     const chatsQuery = useMemoFirebase(() => {
-        if (!user) return null;
+        if (!firestore || !user) return null;
         return query(
             collection(firestore, 'chats'),
             where('participants', 'array-contains', user.uid),

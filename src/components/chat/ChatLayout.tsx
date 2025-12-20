@@ -1,9 +1,13 @@
+
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { type User } from "firebase/auth";
-import { doc, collection, orderBy, query, serverTimestamp, updateDoc } from "firebase/firestore";
-import { useFirestore, useCollection, useDoc, useMemoFirebase } from "@/firebase";
+import type { User } from "firebase/auth";
+import { collection, orderBy, query, updateDoc } from "firebase/firestore";
+import { useFirestore } from "@/firebase/provider";
+import { useCollection } from "@/firebase/firestore/use-collection";
+import { useDoc, useMemoFirebase } from "@/firebase/firestore/use-doc";
+import { doc } from 'firebase/firestore';
 import type { Message, UserProfile } from "@/lib/types";
 import { Header } from "./Header";
 import { MessageBubble } from "./MessageBubble";
@@ -22,6 +26,7 @@ type ExtendedMessage = Message & { isDisappearing?: boolean };
 export default function ChatLayout({ chatId, currentUser, otherUserId }: ChatLayoutProps) {
   const firestore = useFirestore();
   const [messages, setMessages] = useState<ExtendedMessage[]>([]);
+  const lastSeenMessageId = useRef<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Memoize Firestore references
@@ -31,7 +36,7 @@ export default function ChatLayout({ chatId, currentUser, otherUserId }: ChatLay
   const chatRef = useMemoFirebase(() => doc(firestore, 'chats', chatId), [firestore, chatId]);
 
   const { data: otherUserData } = useDoc<UserProfile>(otherUserRef);
-  const { data: serverMessages, isLoading: messagesLoading } = useCollection<Message>(messagesQuery);
+  const { data: serverMessages } = useCollection<Message>(messagesQuery);
   const { data: chatData } = useDoc(chatRef);
 
 
@@ -41,18 +46,19 @@ export default function ChatLayout({ chatId, currentUser, otherUserId }: ChatLay
   
   useEffect(() => {
     if (serverMessages) {
-        // Map server messages and set a timeout to mark them for disappearing
-        const extendedMessages = serverMessages.map(msg => ({ ...msg, isDisappearing: false }));
-        setMessages(extendedMessages);
-        
-        // When new messages arrive, make them disappear after a delay
-        // This simulates the ephemeral nature of the chat
-        const newMessages = serverMessages.filter(
-            (sm) => !messages.some((m) => m.id === sm.id)
-        );
+        // Find new messages that have arrived since the last update
+        const lastSeenIndex = lastSeenMessageId.current ? serverMessages.findIndex(m => m.id === lastSeenMessageId.current) : -1;
+        const newMessages = serverMessages.slice(lastSeenIndex + 1);
 
-        if(newMessages.length > 0) {
+        if (newMessages.length > 0) {
+            // Update the last seen message ID to the latest one
+            lastSeenMessageId.current = newMessages[newMessages.length - 1].id;
+
+            // Add new messages to the current state
+            setMessages(prevMessages => [...prevMessages, ...newMessages.map(m => ({ ...m, isDisappearing: false }))]);
+            
             scrollToBottom();
+            
             const timer = setTimeout(() => {
                 setMessages(prevMessages => 
                     prevMessages.map(msg => 
@@ -63,17 +69,23 @@ export default function ChatLayout({ chatId, currentUser, otherUserId }: ChatLay
 
             const removalTimer = setTimeout(() => {
                 setMessages(prevMessages => 
-                    prevMessages.filter(msg => !newMessages.some(nm => nm.id === msg.id))
+                    prevMessages.filter(msg => !newMessages.some(nm => nm.id === msg.id && msg.isDisappearing))
                 );
             }, 3300); // Remove from DOM after animation
 
             return () => {
                 clearTimeout(timer);
                 clearTimeout(removalTimer);
+            };
+        } else if (messages.length === 0 && serverMessages.length > 0) {
+            // Initial load case
+            setMessages(serverMessages.map(m => ({ ...m, isDisappearing: false })));
+            if (serverMessages.length > 0) {
+                lastSeenMessageId.current = serverMessages[serverMessages.length - 1].id;
             }
         }
     }
-  }, [serverMessages, messages]);
+  }, [serverMessages, messages.length]);
 
 
   useEffect(() => {

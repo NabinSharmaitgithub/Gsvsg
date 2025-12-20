@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
+import type { useMemoFirebase } from '@/firebase/provider';
 
 /** Utility type to add an 'id' field to a given type T. */
 export type WithId<T> = T & { id: string };
@@ -39,21 +40,25 @@ export interface InternalQuery extends Query<DocumentData> {
 }
 
 /**
+ * A marker type to ensure that the query/reference passed to the hook is memoized.
+ * This is a trick to enforce the use of `useMemoFirebase` at the type level.
+ */
+type Memoized<T> = T & { __memo: true };
+
+/**
  * React hook to subscribe to a Firestore collection or query in real-time.
  * Handles nullable references/queries.
- * 
  *
- * IMPORTANT! YOU MUST MEMOIZE the inputted memoizedTargetRefOrQuery or BAD THINGS WILL HAPPEN
- * use useMemo to memoize it per React guidence.  Also make sure that it's dependencies are stable
- * references
- *  
+ * IMPORTANT! You MUST wrap the query/reference with the `useMemoFirebase` hook,
+ * or the hook will enter an infinite loop.
+ *
  * @template T Optional type for document data. Defaults to any.
- * @param {CollectionReference<DocumentData> | Query<DocumentData> | null | undefined} targetRefOrQuery -
- * The Firestore CollectionReference or Query. Waits if null/undefined.
+ * @param {Memoized<CollectionReference | Query> | null | undefined} memoizedTargetRefOrQuery -
+ * The memoized Firestore CollectionReference or Query.
  * @returns {UseCollectionResult<T>} Object with data, isLoading, error.
  */
 export function useCollection<T = any>(
-    memoizedTargetRefOrQuery: ((CollectionReference<DocumentData> | Query<DocumentData>) & {__memo?: boolean})  | null | undefined,
+    memoizedTargetRefOrQuery: Memoized<CollectionReference<DocumentData> | Query<DocumentData>>  | null | undefined,
 ): UseCollectionResult<T> {
   type ResultItemType = WithId<T>;
   type StateDataType = ResultItemType[] | null;
@@ -62,11 +67,14 @@ export function useCollection<T = any>(
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<FirestoreError | Error | null>(null);
 
-  if (memoizedTargetRefOrQuery && !('__memo' in memoizedTargetRefOrQuery)) {
-    throw new Error('useCollection received a query or reference that was not created with useMemoFirebase. This will cause infinite loops.');
-  }
-
   useEffect(() => {
+    if (memoizedTargetRefOrQuery && !('__memo' in memoizedTargetRefOrQuery)) {
+      console.error('useCollection received a query or reference that was not created with useMemoFirebase. This will cause infinite loops.');
+      setError(new Error('useCollection query must be memoized with useMemoFirebase.'));
+      setIsLoading(false);
+      return;
+    }
+
     if (!memoizedTargetRefOrQuery) {
       setData(null);
       setIsLoading(false);

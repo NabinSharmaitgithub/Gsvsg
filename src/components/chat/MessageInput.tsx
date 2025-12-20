@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useRef, useState, useTransition, useEffect, useCallback } from "react";
@@ -5,8 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { SendHorizonal } from "lucide-react";
-import { collection, doc, serverTimestamp, writeBatch, increment, updateDoc, arrayUnion, arrayRemove } from "firebase/firestore";
-import { useFirestore } from "@/firebase";
+import { collection, doc, serverTimestamp, writeBatch, increment, arrayUnion, arrayRemove } from "firebase/firestore";
+import { useFirestore } from "@/firebase/provider";
+import { addDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+
 
 type MessageInputProps = {
   chatId: string;
@@ -28,8 +31,7 @@ export function MessageInput({ chatId, userId, otherUserId, onMessageSent }: Mes
     if (!chatId) return;
     const chatRef = doc(firestore, 'chats', chatId);
     const operation = isTyping ? arrayUnion(userId) : arrayRemove(userId);
-    updateDoc(chatRef, { typing: operation })
-      .catch(err => console.error("Error updating typing status: ", err));
+    updateDocumentNonBlocking(chatRef, { typing: operation });
   }, [firestore, chatId, userId]);
 
   useEffect(() => {
@@ -94,12 +96,9 @@ export function MessageInput({ chatId, userId, otherUserId, onMessageSent }: Mes
             timestamp: serverTimestamp(),
         }
 
-        const batch = writeBatch(firestore);
-
-        const messageRef = doc(messagesColRef);
-        batch.set(messageRef, newMessage);
-
-        batch.update(chatRef, {
+        // Use non-blocking updates
+        addDocumentNonBlocking(messagesColRef, newMessage);
+        updateDocumentNonBlocking(chatRef, {
             lastMessage: {
                 text: originalText,
                 timestamp: serverTimestamp(),
@@ -107,8 +106,6 @@ export function MessageInput({ chatId, userId, otherUserId, onMessageSent }: Mes
             },
             [`userStatus.${otherUserId}.unreadCount`]: increment(1),
         });
-        
-        await batch.commit();
 
         onMessageSent();
       } catch (error) {
