@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useAuth } from "@/firebase";
 import { AuthProvider, GoogleAuthProvider, GithubAuthProvider, FacebookAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
@@ -14,6 +15,13 @@ export function AuthScreen() {
     const auth = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
+    const [year, setYear] = useState<number | null>(null);
+
+    useEffect(() => {
+        // This ensures the year is only calculated on the client, preventing hydration errors.
+        setYear(new Date().getFullYear());
+    }, []);
+
 
     const handleSignIn = async (provider: AuthProvider) => {
         if (!auth || !firestore) {
@@ -92,7 +100,7 @@ export function AuthScreen() {
                 </p>
             </div>
              <footer className="text-center mt-8 text-xs text-muted-foreground">
-                <p>&copy; {new Date().getFullYear()} ShadowText. Your privacy is paramount.</p>
+                {year && <p>&copy; {year} ShadowText. Your privacy is paramount.</p>}
             </footer>
         </div>
     );
