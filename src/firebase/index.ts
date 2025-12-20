@@ -22,9 +22,12 @@ export function initializeFirebase() {
       appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
   };
 
-  // Use the production config if all required environment variables are set,
-  // otherwise fall back to the local development config.
-  const useProdConfig = Object.values(prodFirebaseConfig).every(Boolean);
+  // Check if the essential prod vars are set. storageBucket is optional.
+  const useProdConfig = 
+    prodFirebaseConfig.apiKey &&
+    prodFirebaseConfig.authDomain &&
+    prodFirebaseConfig.projectId;
+
   const firebaseApp = initializeApp(useProdConfig ? prodFirebaseConfig : devFirebaseConfig);
 
   return getSdks(firebaseApp);
