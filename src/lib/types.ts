@@ -11,7 +11,7 @@ export type Message = {
   id: string;
   senderId: string;
   text: string;
-  timestamp: Timestamp | any;
+  timestamp: Timestamp;
 };
 
 export type Chat = {

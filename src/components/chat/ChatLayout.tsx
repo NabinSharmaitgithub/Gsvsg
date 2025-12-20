@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
@@ -115,4 +114,3 @@ export default function ChatLayout({ chatId, currentUser, otherUserId }: ChatLay
     </div>
   );
 }
-

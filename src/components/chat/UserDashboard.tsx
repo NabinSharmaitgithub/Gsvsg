@@ -10,6 +10,7 @@ import type { Chat } from "@/lib/types";
 import { Loader2, MessageSquarePlus, LogOut } from "lucide-react";
 import Link from "next/link";
 import { ChatListItem } from "./ChatListItem";
+import { signOut } from "firebase/auth";
 
 export function UserDashboard() {
     const auth = useAuth();
@@ -28,7 +29,9 @@ export function UserDashboard() {
     const { data: chats, isLoading: chatsLoading } = useCollection<Chat>(chatsQuery);
 
     const handleSignOut = () => {
-        auth.signOut();
+        if (auth) {
+            signOut(auth);
+        }
     };
 
     if (!user) return null;
