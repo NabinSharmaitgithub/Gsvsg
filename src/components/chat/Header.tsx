@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Logo } from "@/components/icons/Logo";
@@ -15,7 +16,7 @@ export function Header({ otherUser }: HeaderProps) {
 
   return (
     <header className="flex items-center p-2 md:p-4 border-b border-white/10 bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-        <Link href="/" className="mr-2">
+        <Link href="/dashboard" className="mr-2">
             <Button variant="ghost" size="icon" aria-label="Back to dashboard">
                 <ArrowLeft />
             </Button>

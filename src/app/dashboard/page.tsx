@@ -2,25 +2,24 @@
 "use client";
 
 import { useUser } from "@/firebase";
-import { AuthScreen } from "@/components/auth/AuthScreen";
+import { UserDashboard } from "@/components/chat/UserDashboard";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export default function Home() {
+export default function DashboardPage() {
   const { user, isUserLoading } = useUser();
   const router = useRouter();
 
   useEffect(() => {
-    // If loading is finished and there is a user, redirect to the dashboard.
-    if (!isUserLoading && user) {
-      router.replace("/dashboard");
+    // If loading is finished and there's no user, redirect to login page.
+    if (!isUserLoading && !user) {
+      router.replace("/");
     }
   }, [user, isUserLoading, router]);
 
-  // If user is authenticated, we show a loader while redirecting.
-  // Otherwise, if still loading, also show a loader.
-  if (isUserLoading || user) {
+  if (isUserLoading || !user) {
+    // Show a loader while we are verifying the user or redirecting.
     return (
       <main className="flex min-h-screen flex-col items-center justify-center">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -29,10 +28,10 @@ export default function Home() {
     );
   }
 
-  // If not loading and no user, show the login screen.
+  // If the user is logged in, show the dashboard.
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-4 sm:p-8">
-      <AuthScreen />
+      <UserDashboard />
     </main>
   );
 }
