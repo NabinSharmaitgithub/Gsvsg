@@ -113,7 +113,8 @@ This guide will walk you through deploying ShadowText to [Render](https://render
         ```bash
         npm install; npm run build
         ```
-        *If you used `yarn` or `pnpm`, set it to `yarn; yarn build` or `pnpm i; pnpm build` respectively.*
+        *If you used `yarn` or `pnpm`, 
+        set it to `yarn; yarn build` or `pnpm i; pnpm build` respectively.*
     -   **Start Command:** Render should auto-detect this. Ensure it is set to:
         ```bash
         npm start
