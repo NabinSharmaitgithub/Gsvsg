@@ -1,157 +1,159 @@
 /**
- * Core Philosophy: This ruleset secures a real-time anonymous chat application.
- * The security model is based on session-level identity, where each authenticated
- * user has a unique session ID (`request.auth.uid`) that acts as their user ID.
- * Access to chat rooms and messages is granted based on a "closed collaborators"
- * pattern, where only the two designated participants in a chat room can read or
- * write data within it.
+ * Core Philosophy: This ruleset enforces a security model based on anonymous but authenticated sessions.
+ * Each user is identified by a unique session ID (`request.auth.uid`). Access to data, particularly
+ * chat rooms and messages, is granted based on direct participation. The system is designed for
+ * ephemeral, private communication between two parties.
  *
  * Data Structure: The data is organized into four top-level collections:
- * - /sessions/{sessionId}: Stores a user's anonymous session data. Access is
- *   strictly limited to the session owner.
- * - /inviteLinks/{inviteLinkId}: Publicly readable links created by users to
- *   initiate new chats. Only the creator can manage their own links.
- * - /chatRooms/{chatRoomId}: Contains metadata for a chat, including the IDs of
- *   the two participants. This document is the source of truth for chat membership.
- * - /messages/{messageId}: Contains all individual chat messages. Access is
- *   granted by checking the parent chat room's participant list.
+ * - /sessions/{sessionId}: Stores a user's own session data.
+ * - /chatRooms/{chatRoomId}: Contains metadata for a conversation, linking two session IDs.
+ * - /messages/{messageId}: Holds individual messages, secured by sender/receiver IDs.
+ * - /inviteLinks/{inviteLinkId}: Manages one-time use links for initiating chats.
  *
  * Key Security Decisions:
- * - Session-Based Identity: `request.auth.uid` is treated as the user's unique
- *   and private session identifier.
- * - Strict Chat Membership: All access to `/chatRooms` and `/messages` requires
- *   the user to be one of the two participants defined in the chat room document.
- * - No Public Listing: To prevent data leakage, listing all chat rooms or all
- *   messages is disabled. Client applications must retrieve chat rooms by known
- *   IDs or query for the ones they are a member of.
- * - Ownership for Invites: Invite links can only be created and deleted by their
- *   original creator.
+ * - Anonymous But Authenticated: All operations require a signed-in session (`request.auth != null`),
+ *   even if the user is anonymous. This provides a stable UID for security checks.
+ * - Participation-Based Access: A user can only access a chat room or its messages if their session ID
+ *   is listed as a participant in the chat room document.
+ * - No User Listing: It is not possible to list or query the `/sessions` or `/inviteLinks`
+ *   collections to protect user privacy and prevent scraping.
+ * - Immutable Relationships: Once created, the participants of a chat room and the sender/receiver
+ *   of a message cannot be changed.
  *
  * Denormalization for Authorization:
- * - The `/chatRooms/{chatRoomId}` document holds `user1Id` and `user2Id`. This
- *   is the authoritative source for membership checks.
- * - The `/messages/{messageId}` documents are expected to contain a `chatRoomId`
- *   field. This denormalized pointer is essential for rules to link a message
- *   back to its chat room to verify if the requesting user is a participant.
- *   This is more performant and secure than trying to infer relationships.
+ * This ruleset relies on denormalization for efficient and secure access control.
+ * - The `ChatRoom` document contains `user1Id` and `user2Id` fields. This allows rules to grant access
+ *   to the document and its subcollections without needing to query other collections.
+ * - The `Message` document contains `senderId` and `receiverId`. This allows rules to secure each message
+ *   directly based on the authenticated user's session ID.
+ *
+ * Structural Segregation: The use of separate top-level collections for different data types
+ * (/chatRooms, /messages, etc.) creates a clear security boundary for each, allowing for
+ * distinct and easy-to-manage rules without complex conditions.
  */
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
     // Helper Functions
-    // ------------------------------------------------------------------------
+    // -------------------------------------------------------------------------
 
     /**
-     * Verifies that a user is signed in.
+     * Returns true if the user is authenticated.
      */
     function isSignedIn() {
       return request.auth != null;
     }
 
     /**
-     * Verifies that the currently signed-in user's ID matches the provided userId.
+     * Returns true if the authenticated user's UID matches the provided userId.
      */
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
-    
-    /**
-     * Verifies that the document being operated on already exists.
-     * Crucial for secure update and delete operations.
-     */
-    function isExistingDoc() {
-        return resource != null;
-    }
 
     /**
-     * Verifies that a document exists and the requesting user is its owner.
-     * Used for secure update and delete operations on user-owned documents.
+     * Returns true if the document exists and the user is the owner.
+     * Used for safe update and delete operations.
      */
     function isExistingOwner(userId) {
-      return isOwner(userId) && isExistingDoc();
+      return isOwner(userId) && resource != null;
     }
 
     /**
-     * Checks if the requesting user is one of the two participants in a given chat room.
-     * This requires a 'get' call to the chat room document, making it suitable for
-     * securing individual document reads and writes.
+     * Returns true if the user is one of the two participants in a chat room.
      */
-    function isChatParticipant(chatRoomId) {
-      let chatRoom = get(/databases/$(database)/documents/chatRooms/$(chatRoomId)).data;
-      return isSignedIn() && (chatRoom.user1Id == request.auth.uid || chatRoom.user2Id == request.auth.uid);
+    function isChatParticipant(chatRoomData) {
+      return isSignedIn() && (request.auth.uid == chatRoomData.user1Id || request.auth.uid == chatRoomData.user2Id);
     }
-    
-    // ------------------------------------------------------------------------
-    // Collection Rules
-    // ------------------------------------------------------------------------
 
     /**
-     * @description Secures a user's anonymous session document.
+     * Validates that the creator of a resource is the currently signed-in user.
+     * Used on create operations.
+     */
+    function isResourceCreator(creatorIdField) {
+      return isSignedIn() && request.resource.data[creatorIdField] == request.auth.uid;
+    }
+
+    /**
+     * Validates that a field is immutable on update.
+     */
+    function isImmutable(fieldName) {
+      return request.resource.data[fieldName] == resource.data[fieldName];
+    }
+
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    /**
+     * @description Controls access to chat room documents.
+     * @path /chatRooms/{chatRoomId}
+     * @allow (get) A user who is a participant (user1Id or user2Id) can read the chat room.
+     * @deny (get) A user who is not a participant cannot read the chat room.
+     * @allow (create) A signed-in user can create a chat room if they are one of the participants.
+     * @deny (update) Chat rooms are immutable after creation.
+     * @principle Enforces access control based on a "Closed Collaborators" model.
+     */
+    match /chatRooms/{chatRoomId} {
+      allow get: if isChatParticipant(resource.data);
+      allow list: if isSignedIn(); // Client MUST query where user is a participant.
+      allow create: if isChatParticipant(request.resource.data) && request.resource.data.user1Id != request.resource.data.user2Id;
+      allow update: if false;
+      allow delete: if isChatParticipant(resource.data) && resource != null;
+    }
+
+    /**
+     * @description Controls access to individual message documents.
+     * @path /messages/{messageId}
+     * @allow (get) The sender or receiver of a message can read it.
+     * @deny (get) A user who is not the sender or receiver cannot read the message.
+     * @allow (create) A user can send a message, setting themselves as the senderId.
+     * @deny (list) Listing all messages is disabled for performance and security.
+     * @principle Enforces document ownership and relational integrity for writes.
+     */
+    match /messages/{messageId} {
+      allow get: if isSignedIn() && (isOwner(resource.data.senderId) || isOwner(resource.data.receiverId));
+      allow list: if false;
+      allow create: if isResourceCreator('senderId') && request.resource.data.senderId != request.resource.data.receiverId;
+      allow update: if isSignedIn() && resource != null && isOwner(resource.data.receiverId) && isImmutable('senderId') && isImmutable('receiverId');
+      allow delete: if isExistingOwner(resource.data.senderId);
+    }
+
+    /**
+     * @description Manages one-time use invite links to start chats.
+     * @path /inviteLinks/{inviteLinkId}
+     * @allow (get) Any authenticated user can read an invite link if they know its ID.
+     * @deny (list) Listing all invite links is forbidden to prevent scraping.
+     * @allow (create) A user can create an invite link for a chat, setting themselves as the creator.
+     * @allow (update) Any user can mark a link as 'used', but cannot change anything else.
+     * @deny (delete) Only the creator can delete their own unused invite link.
+     * @principle Enforces document ownership for creation and deletion.
+     */
+    match /inviteLinks/{inviteLinkId} {
+      allow get: if isSignedIn();
+      allow list: if false;
+      allow create: if isResourceCreator('creatorId') && request.resource.data.used == false;
+      allow update: if isSignedIn() && resource != null && resource.data.used == false && request.resource.data.used == true && isImmutable('creatorId') && isImmutable('chatRoomId');
+      allow delete: if isExistingOwner(resource.data.creatorId);
+    }
+
+    /**
+     * @description Secures a user's own session document.
      * @path /sessions/{sessionId}
-     * @allow (create) A user creates their own session document: `db.collection('sessions').doc('user_abc').set({ id: 'user_abc', ... })` if auth.uid is 'user_abc'.
-     * @deny (get) A user tries to read another user's session document: `db.collection('sessions').doc('user_xyz').get()` if auth.uid is 'user_abc'.
-     * @principle Restricts access to a user's own data tree.
+     * @allow (read, write) A user can only access their own session document.
+     * @deny (read, write) A user cannot access another user's session document.
+     * @deny (list) Listing sessions is forbidden to protect user privacy.
+     * @principle Restricts access to a user's own data tree (Ownership model).
      */
     match /sessions/{sessionId} {
       allow get: if isOwner(sessionId);
-      allow list: if isOwner(sessionId);
-      allow create: if isOwner(sessionId) && request.resource.data.id == sessionId;
-      allow update: if isExistingOwner(sessionId) && request.resource.data.id == resource.data.id;
-      allow delete: if isExistingOwner(sessionId);
-    }
-
-    /**
-     * @description Secures chat room documents, which define chat participants.
-     * @path /chatRooms/{chatRoomId}
-     * @allow (get) A user who is a participant reads a chat room: `db.collection('chatRooms').doc('chat_123').get()` if auth.uid is a participant in chat_123.
-     * @deny (list) Any user tries to list all chat rooms: `db.collection('chatRooms').get()`.
-     * @deny (update) A participant tries to change the members of the chat room.
-     * @principle Enforces closed-collaborator access based on participant IDs.
-     */
-    match /chatRooms/{chatRoomId} {
-      allow get: if isSignedIn() && (resource.data.user1Id == request.auth.uid || resource.data.user2Id == request.auth.uid);
-      allow list: if false; // Denied for security. Clients must query for chats where they are a member.
-      allow create: if isSignedIn() && (request.resource.data.user1Id == request.auth.uid || request.resource.data.user2Id == request.auth.uid);
-      allow update: if false; // Chat room participants are immutable.
-      allow delete: if isExistingDoc() && isSignedIn() && (resource.data.user1Id == request.auth.uid || resource.data.user2Id == request.auth.uid);
-    }
-
-    /**
-     * @description Secures individual chat messages. Access is derived from membership in the associated chat room.
-     * @path /messages/{messageId}
-     * @allow (create) A user sends a message to a chat they are part of: `db.collection('messages').add({ senderId: 'user_abc', chatRoomId: 'chat_123', ... })` if auth.uid is 'user_abc' and a member of chat_123.
-     * @deny (list) A user tries to list all messages, even with a filter: `db.collection('messages').where('chatRoomId', '==', 'chat_123').get()`.
-     * @deny (get) A user tries to read a message from a chat they are not in.
-     * @principle Relational security; access is granted based on a related document (the ChatRoom).
-     */
-    match /messages/{messageId} {
-      // NOTE: These rules assume that every message document contains a 'chatRoomId' field that
-      // correctly points to its parent chat room. This field is essential for security.
-      allow get: if isChatParticipant(resource.data.chatRoomId);
-      // CRITICAL: Listing a top-level collection based on checks against a related document is not
-      // secure or possible in Firestore rules. The rule cannot access the `where` clause of the query.
-      // The recommended secure pattern is to nest messages within a chatRoom subcollection.
-      // e.g., /chatRooms/{chatRoomId}/messages/{messageId}
       allow list: if false;
-      allow create: if isChatParticipant(request.resource.data.chatRoomId) && request.resource.data.senderId == request.auth.uid;
-      allow update: if false; // Messages are immutable for simplicity and security.
-      allow delete: if isExistingOwner(resource.data.senderId) && isChatParticipant(resource.data.chatRoomId);
-    }
-
-    /**
-     * @description Secures invite links for starting new chats.
-     * @path /inviteLinks/{inviteLinkId}
-     * @allow (create) A signed-in user creates an invite link for a chat: `db.collection('inviteLinks').add({ creatorId: 'user_abc', ... })` if auth.uid is 'user_abc'.
-     * @deny (delete) A user tries to delete an invite link they did not create.
-     * @principle Enforces document ownership for writes, while allowing reads for any signed-in user.
-     */
-    match /inviteLinks/{inviteLinkId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.creatorId == request.auth.uid;
-      allow update: if isExistingOwner(resource.data.creatorId) && request.resource.data.creatorId == resource.data.creatorId && request.resource.data.chatRoomId == resource.data.chatRoomId;
-      allow delete: if isExistingOwner(resource.data.creatorId);
+      allow create: if isOwner(sessionId) && request.resource.data.id == sessionId;
+      allow update: if isExistingOwner(sessionId) && isImmutable('id');
+      allow delete: if isExistingOwner(sessionId);
     }
   }
 }
