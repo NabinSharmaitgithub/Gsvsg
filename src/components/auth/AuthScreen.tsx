@@ -16,6 +16,14 @@ export function AuthScreen() {
     const { toast } = useToast();
 
     const handleSignIn = async (provider: AuthProvider) => {
+        if (!auth || !firestore) {
+             toast({
+                variant: "destructive",
+                title: "Firebase not initialized",
+                description: "The application is not connected to Firebase.",
+            });
+            return;
+        }
         try {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
