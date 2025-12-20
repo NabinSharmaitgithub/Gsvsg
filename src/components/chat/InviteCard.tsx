@@ -17,6 +17,7 @@ export function InviteCard() {
   const { toast } = useToast();
 
   useEffect(() => {
+    // This check runs only on the client side
     if (typeof window !== 'undefined' && (!window.crypto || !window.crypto.subtle)) {
       setIsCryptoAvailable(false);
     }
@@ -39,11 +40,13 @@ export function InviteCard() {
         throw new Error(chatAction.error || "Failed to create chat.");
       }
 
+      // These crypto functions are now safely called within a client-side handler
       const key = await generateKey();
       const exportedKey = await exportKey(key);
       const url = `${window.location.origin}/chat/${chatAction.chatId}#${exportedKey}`;
       setInviteLink(url);
     } catch (error) {
+      console.error("Error creating chat link:", error);
       toast({
         variant: "destructive",
         title: "Error",

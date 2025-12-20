@@ -37,51 +37,53 @@ export default function ChatLayout({ chatId }: { chatId: string }) {
   }, []);
 
   useEffect(() => {
-    // Generate or retrieve user ID
-    let sessionUserId = sessionStorage.getItem("shadow-user-id");
-    if (!sessionUserId) {
-      sessionUserId = crypto.randomUUID();
-      sessionStorage.setItem("shadow-user-id", sessionUserId);
-    }
-    setUserId(sessionUserId);
+    let sessionUserId: string;
 
-    // Get crypto key from URL hash
-    const keyData = window.location.hash.substring(1);
-    if (!keyData) {
-      setError("Encryption key not found. This link may be invalid or expired.");
-      return;
-    }
-    
-    importKey(keyData)
-      .then(key => {
+    const initialize = async () => {
+      // This code now runs only on the client
+      sessionUserId = sessionStorage.getItem("shadow-user-id") || crypto.randomUUID();
+      sessionStorage.setItem("shadow-user-id", sessionUserId);
+      setUserId(sessionUserId);
+
+      const keyData = window.location.hash.substring(1);
+      if (!keyData) {
+        setError("Encryption key not found. This link may be invalid or expired.");
+        return;
+      }
+      
+      try {
+        const key = await importKey(keyData);
         setCryptoKey(key);
-        return joinChat(chatId, sessionUserId!);
-      })
-      .then(joinResult => {
+        
+        const joinResult = await joinChat(chatId, sessionUserId);
         if (!joinResult.success) {
            setError(joinResult.error || "Could not join chat. The room might be full.");
            if (joinResult.error?.includes("full")) {
-            //  router.push('/');
+             // router.push('/'); // Optional: redirect if full
            }
         }
-      })
-      .catch(() => setError("Invalid encryption key."));
-      
-      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-        if(userId) {
-           leaveChat(chatId, userId);
-        }
-      };
+      } catch (e) {
+        setError("Invalid encryption key.");
+      }
+    };
 
-      window.addEventListener("beforeunload", handleBeforeUnload);
+    initialize();
 
-      return () => {
-        if(sessionUserId) {
-           leaveChat(chatId, sessionUserId);
-        }
-        window.removeEventListener("beforeunload", handleBeforeUnload);
-      };
+    const handleBeforeUnload = () => {
+      if (sessionUserId) {
+        // Use sendBeacon for more reliable background sending
+        navigator.sendBeacon('/api/leave', JSON.stringify({ chatId, userId: sessionUserId }));
+      }
+    };
 
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      if (sessionUserId) {
+        leaveChat(chatId, sessionUserId);
+      }
+    };
   }, [chatId, router]);
 
 

@@ -2,6 +2,12 @@
 
 # This script automates the process of adding, committing, and pushing code to GitHub.
 
+# Ensure we are in a git repository
+if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo "❌ This is not a git repository. Please initialize with 'git init'."
+    exit 1
+fi
+
 # 1. Check for uncommitted changes
 echo "Checking for changes..."
 if git diff-index --quiet HEAD --; then
