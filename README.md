@@ -74,8 +74,3 @@ Follow these instructions to set up and run the project on your local machine.
 ## Deployment
 
 For detailed instructions on how to deploy this application, please see the [deployment guide](./deployment.md).
-
-
-
-
-rrr

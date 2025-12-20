@@ -9,7 +9,7 @@ import { Header } from "./Header";
 import { MessageBubble } from "./MessageBubble";
 import { MessageInput } from "./MessageInput";
 import { TypingIndicator } from "./TypingIndicator";
-import { setDocumentNonBlocking, updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import { updateDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 
 type ChatLayoutProps = {
   chatId: string;
@@ -73,7 +73,7 @@ export default function ChatLayout({ chatId, currentUser, otherUserId }: ChatLay
             }
         }
     }
-  }, [serverMessages]);
+  }, [serverMessages, messages]);
 
 
   useEffect(() => {
