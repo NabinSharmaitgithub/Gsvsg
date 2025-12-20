@@ -4,7 +4,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Session",
       "type": "object",
-      "description": "Represents a user's session, used for identifying users anonymously.",
+      "description": "Represents a user's session, used for identifying users without requiring login details.",
       "properties": {
         "id": {
           "type": "string",
@@ -17,7 +17,7 @@
         },
         "expiryTime": {
           "type": "string",
-          "description": "Timestamp indicating when the session expires.",
+          "description": "Timestamp indicating when the session should expire.",
           "format": "date-time"
         }
       },
@@ -27,117 +27,82 @@
         "expiryTime"
       ]
     },
-    "Message": {
+    "ChatMessage": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Message",
+      "title": "ChatMessage",
       "type": "object",
-      "description": "Represents a single chat message.",
+      "description": "Represents a single chat message between two users.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the message."
+          "description": "Unique identifier for the chat message."
         },
-        "senderId": {
+        "senderSessionId": {
           "type": "string",
-          "description": "Reference to Session. (Relationship: Session 1:N Message)  ID of the user who sent the message."
+          "description": "Reference to Session of the message sender. (Relationship: Session 1:N ChatMessage)"
         },
-        "receiverId": {
+        "receiverSessionId": {
           "type": "string",
-          "description": "Reference to Session. (Relationship: Session 1:N Message) ID of the user who should receive the message."
+          "description": "Reference to Session of the message receiver. (Relationship: Session 1:N ChatMessage)"
         },
         "content": {
           "type": "string",
-          "description": "The encrypted content of the message."
+          "description": "The encrypted content of the chat message."
         },
         "timestamp": {
           "type": "string",
           "description": "Timestamp indicating when the message was sent.",
           "format": "date-time"
         },
-        "isRead": {
-          "type": "boolean",
-          "description": "Indicates if the message has been read by the recipient."
+        "status": {
+          "type": "string",
+          "description": "Status of the message (e.g., sent, delivered, opened).",
+          "format": "string"
         }
       },
       "required": [
         "id",
-        "senderId",
-        "receiverId",
+        "senderSessionId",
+        "receiverSessionId",
         "content",
         "timestamp",
-        "isRead"
-      ]
-    },
-    "ChatRoom": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "ChatRoom",
-      "type": "object",
-      "description": "Represents a chat room between two users.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the chat room."
-        },
-        "user1Id": {
-          "type": "string",
-          "description": "Reference to Session. (Relationship: Session 1:N ChatRoom) ID of the first user in the chat room."
-        },
-        "user2Id": {
-          "type": "string",
-          "description": "Reference to Session. (Relationship: Session 1:N ChatRoom) ID of the second user in the chat room."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp indicating when the chat room was created.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "user1Id",
-        "user2Id",
-        "createdAt"
+        "status"
       ]
     },
     "InviteLink": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "InviteLink",
       "type": "object",
-      "description": "Represents a one-time use invite link for joining a chat.",
+      "description": "Represents a one-time use invite link for creating a new chat session.",
       "properties": {
         "id": {
           "type": "string",
           "description": "Unique identifier for the invite link."
         },
-        "creatorId": {
+        "creatorSessionId": {
           "type": "string",
-          "description": "Reference to Session. ID of the user who created the invite link."
-        },
-        "chatRoomId": {
-          "type": "string",
-          "description": "Reference to ChatRoom. ID of the chat room this link is associated with."
+          "description": "Reference to Session of the user who created the invite link. (Relationship: Session 1:N InviteLink)"
         },
         "createdAt": {
           "type": "string",
           "description": "Timestamp indicating when the invite link was created.",
           "format": "date-time"
         },
-        "expiresAt": {
+        "expiryTime": {
           "type": "string",
-          "description": "Timestamp indicating when the invite link expires.",
+          "description": "Timestamp indicating when the invite link should expire.",
           "format": "date-time"
         },
         "used": {
           "type": "boolean",
-          "description": "Indicates if the invite link has been used."
+          "description": "Indicates whether the invite link has been used or not."
         }
       },
       "required": [
         "id",
-        "creatorId",
-        "chatRoomId",
+        "creatorSessionId",
         "createdAt",
-        "expiresAt",
+        "expiryTime",
         "used"
       ]
     }
@@ -151,33 +116,37 @@
   "firestore": {
     "structure": [
       {
-        "path": "/chatRooms/{chatRoomId}",
+        "path": "/sessions/{sessionId}",
         "definition": {
-          "entityName": "ChatRoom",
+          "entityName": "Session",
           "schema": {
-            "$ref": "#/backend/entities/ChatRoom"
+            "$ref": "#/backend/entities/Session"
           },
-          "description": "Stores chat room metadata. Chat rooms are created via invite links.",
+          "description": "Stores session information, including creation and expiry timestamps.",
           "params": [
             {
-              "name": "chatRoomId",
-              "description": "Unique identifier for the chat room."
+              "name": "sessionId",
+              "description": "Unique identifier for the session."
             }
           ]
         }
       },
       {
-        "path": "/messages/{messageId}",
+        "path": "/sessions/{sessionId}/chatMessages/{chatMessageId}",
         "definition": {
-          "entityName": "Message",
+          "entityName": "ChatMessage",
           "schema": {
-            "$ref": "#/backend/entities/Message"
+            "$ref": "#/backend/entities/ChatMessage"
           },
-          "description": "Stores chat messages. Includes `senderId`, `receiverId` and denormalized `chatRoomId` for authorization independence.",
+          "description": "Stores chat messages associated with a specific session. Includes sender and receiver session IDs for authorization purposes.",
           "params": [
             {
-              "name": "messageId",
-              "description": "Unique identifier for the message."
+              "name": "sessionId",
+              "description": "Session ID associated with either the sender or receiver."
+            },
+            {
+              "name": "chatMessageId",
+              "description": "Unique identifier for the chat message."
             }
           ]
         }
@@ -189,7 +158,7 @@
           "schema": {
             "$ref": "#/backend/entities/InviteLink"
           },
-          "description": "Stores invite link data. Includes `creatorId` for authorization.",
+          "description": "Stores invite link information, including the creator's session ID, creation and expiry timestamps, and usage status.",
           "params": [
             {
               "name": "inviteLinkId",
@@ -197,24 +166,8 @@
             }
           ]
         }
-      },
-      {
-        "path": "/sessions/{sessionId}",
-        "definition": {
-          "entityName": "Session",
-          "schema": {
-            "$ref": "#/backend/entities/Session"
-          },
-          "description": "Stores session data, used as an anonymous identifier.",
-          "params": [
-            {
-              "name": "sessionId",
-              "description": "Unique identifier for the session."
-            }
-          ]
-        }
       }
     ],
-    "reasoning": "This design prioritizes anonymity and ephemeral messaging.  It uses separate collections for chat rooms and messages, with denormalization to ensure authorization independence. Invite links are managed in their own collection, ensuring they are one-time use. Since no user accounts exist, session IDs are treated as user identifiers for security rule purposes. This structure facilitates secure `list` operations and atomic operations through Authorization Independence.\n\nAuthorization Independence is achieved by:\n1.  Storing chat room IDs in each message document. This enables direct access to messages given a chat room, without needing to query or 'get()' the parent chat room document.\n2.  InviteLink documents explicitly store the `creatorId` to allow restricting invite link creation and usage.\n\nQAPs:\n1.  The use of distinct collections (`chatRooms`, `messages`, `inviteLinks`) enables straightforward security rules for each data type.\n2.  Authorization is determined by the `senderId`, `receiverId` and `chatRoomId` of `messages` allowing for secure `list` operations on messages for a given chat room and participants."
+    "reasoning": "Given the application's emphasis on anonymity, ephemeral messages, and the absence of traditional user accounts, the Firestore structure is designed around temporary sessions.  Since there are no user accounts and we need to avoid using custom claims, we will follow a path-based approach using sessionId's to identify message ownership and access. This structure facilitates secure `list` operations because access to a message is predicated on knowing either the sender or receiver session ID, preventing unauthorized listing of messages. Authorization Independence is achieved since access control relies solely on session IDs present in the document itself, thus no `get()` calls are needed in the rules."
   }
 }
