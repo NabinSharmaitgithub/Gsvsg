@@ -27,9 +27,8 @@ service cloud.firestore {
 
     /**
      * /chats/{chatId}
-     * - A user can read a chat document if they are a participant.
+     * - A user can read or update a chat document if they are a participant.
      * - A user can create a chat if they are one of the participants.
-     * - A user can update a chat (e.g., last message, typing status) if they are a participant.
      * - A user can list (query) chats only if they are querying for their own chats.
      */
     match /chats/{chatId} {
@@ -44,7 +43,7 @@ service cloud.firestore {
        * - Nobody can update or delete messages to ensure message integrity.
        */
       match /messages/{messageId} {
-        allow list, get: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]);
+        allow get, list: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]);
         allow create: if isSignedIn() && 
                       get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]) &&
                       request.resource.data.senderId == request.auth.uid;
