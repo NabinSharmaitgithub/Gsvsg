@@ -32,8 +32,13 @@ service cloud.firestore {
      * - A user can list (query) chats only if they are querying for their own chats.
      */
     match /chats/{chatId} {
+      // Allow get/update if user is a participant
       allow get, update: if isSignedIn() && request.auth.uid in resource.data.participants;
+
+      // Allow create if user is in the participants list of the new doc
       allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
+
+      // Allow list (query) if the query is filtering for chats where the user is a participant
       allow list: if isSignedIn() && request.auth.uid in request.query.where.participants;
 
       /**
@@ -43,10 +48,15 @@ service cloud.firestore {
        * - Nobody can update or delete messages to ensure message integrity.
        */
       match /messages/{messageId} {
-        allow get, list: if isSignedIn() && get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]);
+        // Allow get/list if user is a participant of the parent chat document
+        allow get, list: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        
+        // Allow create if user is a participant AND the new message's senderId is their own UID
         allow create: if isSignedIn() && 
-                      get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]) &&
+                      request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
                       request.resource.data.senderId == request.auth.uid;
+        
+        // Disallow updates and deletes to preserve chat history
         allow update, delete: if false;
       }
     }
