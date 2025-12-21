@@ -1,9 +1,7 @@
 
 "use client";
 
-import { useUser } from "@/firebase";
-import { useFirestore } from "@/firebase/provider";
-import { useDoc, useMemoFirebase } from "@/firebase/firestore/use-doc";
+import { useUser, useFirestore, useDoc, useMemoFirebase } from "@/firebase";
 import { useRouter, useParams } from "next/navigation";
 import { doc } from 'firebase/firestore';
 import ChatLayout from '@/components/chat/ChatLayout';

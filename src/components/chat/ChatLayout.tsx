@@ -1,12 +1,10 @@
 
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import type { User } from "firebase/auth";
-import { collection, orderBy, query, updateDoc } from "firebase/firestore";
-import { useFirestore } from "@/firebase/provider";
-import { useCollection } from "@/firebase/firestore/use-collection";
-import { useDoc, useMemoFirebase } from "@/firebase/firestore/use-doc";
+import { collection, orderBy, query } from "firebase/firestore";
+import { useFirestore, useCollection, useDoc, useMemoFirebase } from "@/firebase";
 import { doc } from 'firebase/firestore';
 import type { Message, UserProfile } from "@/lib/types";
 import { Header } from "./Header";

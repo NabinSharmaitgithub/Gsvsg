@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, ReactNode, useMemo, DependencyList } from 'react';
+import React, { createContext, useContext, ReactNode, useMemo } from 'react';
 import { type FirebaseApp } from 'firebase/app';
 import { type Firestore } from 'firebase/firestore';
 import { type Auth } from 'firebase/auth';
@@ -78,20 +78,3 @@ export const useFirebaseApp = (): FirebaseApp => {
   const { firebaseApp } = useFirebase();
   return firebaseApp;
 };
-
-/**
- * A hook to create a stable, memoized reference to a Firestore query or reference.
- * This is CRITICAL for preventing infinite loops in `useCollection` and `useDoc`.
- * It adds a `__memo` flag that the hooks check for to ensure this is used.
- */
-export function useMemoFirebase<T>(factory: () => T, deps: DependencyList): T & { __memo: true } {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const memoized = useMemo(factory, deps);
-  
-  if(typeof memoized === 'object' && memoized !== null) {
-    // Attach a marker to the object to indicate it's memoized.
-    (memoized as any).__memo = true;
-  }
-  
-  return memoized as T & { __memo: true };
-}
